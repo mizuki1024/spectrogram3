@@ -65,19 +65,23 @@ STYLESHEET = """
 # --- 音声処理部分 ---
 # 'name'キーは内部的には残しますが、UI表示には使用しません
 VOWELS = {
+    'a': {'name': 'ah',   'color': '#FF66CC', 'f1': 634, 'f2': 1088},
     'i': {'name': 'heed', 'color': '#FF5733', 'f1': 324, 'f2': 2426},
+    'u': {'name': 'who\'d','color': '#5833FF', 'f1': 344, 'f2': 1281},
+    'e': {'name': 'eh',   'color': '#66FF33', 'f1': 502, 'f2': 2065}, 
+    'o': {'name': 'oh',   'color': '#33CCFF', 'f1': 445, 'f2': 854},
     'ɪ': {'name': 'hid',  'color': '#FF8D33', 'f1': 390, 'f2': 1990},
     'ɛ': {'name': 'head', 'color': '#FFC300', 'f1': 530, 'f2': 1840},
     'æ': {'name': 'had',  'color': '#DAF7A6', 'f1': 660, 'f2': 1720},
     'ɑ': {'name': 'hod',  'color': '#33FF57', 'f1': 730, 'f2': 1090},
-    'ɔ': {'name': 'hawed','color': '#33FFCE', 'f1': 570, 'f2': 840},
     'ʊ': {'name': 'hood', 'color': '#33A5FF', 'f1': 440, 'f2': 1020},
-    'u': {'name': 'who\'d','color': '#5833FF', 'f1': 344, 'f2': 1281},
     'ʌ': {'name': 'bud',  'color': '#C70039', 'f1': 640, 'f2': 1190},
-    'ə': {'name': 'sofa', 'color': '#900C3F', 'f1': 500, 'f2': 1500},
-    'a': {'name': 'ah',   'color': '#FF66CC', 'f1': 634, 'f2': 1088}, 
-    'e': {'name': 'eh',   'color': '#66FF33', 'f1': 502, 'f2': 2065}, 
-    'o': {'name': 'oh',   'color': '#33CCFF', 'f1': 445, 'f2': 854},
+    'ə': {'name': 'sofa', 'color': '#900C3F', 'f1': 500, 'f2': 1500}, 
+    'iː': {'name': 'ee',    'color': '#FF33AA', 'f1': 270, 'f2': 2290},
+    'ɑː': {'name': 'ahh',   'color': '#33FF99', 'f1': 750, 'f2': 1200}, 
+    'ɜː': {'name': 'er',    'color': '#FF9933', 'f1': 550, 'f2': 1600}, 
+    'ɔː': {'name': 'hawed','color': '#33FFCE', 'f1': 570, 'f2': 840},
+    'uː': {'name': 'oo',    'color': '#3366FF', 'f1': 300, 'f2': 870},
 }
 SILENCE_THRESHOLD = 0.01
 TIME_STEP = 0.03
@@ -348,7 +352,7 @@ class SpectrogramApp(QMainWindow):
         
         vowel_layout = QGridLayout(); buttons = {}
         vowel_items = list(VOWELS.items())
-        positions = [(i, j) for i in range(3) for j in range(5)]
+        positions = [(i, j) for i in range(4) for j in range(5)]
         
         for i, (key, val) in enumerate(vowel_items):
             pos = positions[i]
