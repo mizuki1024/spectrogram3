@@ -65,25 +65,27 @@ STYLESHEET = """
 # --- 音声処理部分 ---
 # 'name'キーは内部的には残しますが、UI表示には使用しません
 VOWELS = {
-    'i': {'name': 'heed', 'color': '#FF5733', 'f1': 270, 'f2': 2290},
+    'い': {'name': 'heed', 'color': '#FF5733', 'f1': 270, 'f2': 2290},
     'ɪ': {'name': 'hid',  'color': '#FF8D33', 'f1': 390, 'f2': 1990},
     'ɛ': {'name': 'head', 'color': '#FFC300', 'f1': 530, 'f2': 1840},
     'æ': {'name': 'had',  'color': '#DAF7A6', 'f1': 660, 'f2': 1720},
     'ɑ': {'name': 'hod',  'color': '#33FF57', 'f1': 730, 'f2': 1090},
     'ɔ': {'name': 'hawed','color': '#33FFCE', 'f1': 570, 'f2': 840},
     'ʊ': {'name': 'hood', 'color': '#33A5FF', 'f1': 440, 'f2': 1020},
-    'u': {'name': 'who\'d','color': '#5833FF', 'f1': 300, 'f2': 870},
+    'う': {'name': 'who\'d','color': '#5833FF', 'f1': 300, 'f2': 870},
     'ʌ': {'name': 'bud',  'color': '#C70039', 'f1': 640, 'f2': 1190},
     'ə': {'name': 'sofa', 'color': '#900C3F', 'f1': 500, 'f2': 1500}
 }
 SILENCE_THRESHOLD = 0.01
+TIME_STEP = 0.03
+MAX_FORMANT = 5000
 
 def extract_formants_praat(audio_data, sample_rate):
     if np.max(np.abs(audio_data)) < SILENCE_THRESHOLD:
         return {'f1': 0, 'f2': 0, 'error': 'Silence detected'}
     try:
         sound = parselmouth.Sound(audio_data, sampling_frequency=sample_rate)
-        formant = sound.to_formant_burg(time_step=0.01, maximum_formant=5500)
+        formant = sound.to_formant_burg(time_step=TIME_STEP, maximum_formant=MAX_FORMANT)
         f1_values = [formant.get_value_at_time(1, t) for t in formant.ts() if not np.isnan(formant.get_value_at_time(1, t))]
         f2_values = [formant.get_value_at_time(2, t) for t in formant.ts() if not np.isnan(formant.get_value_at_time(2, t))]
         if not f1_values or not f2_values: return {'f1': 0, 'f2': 0, 'error': 'No formants found'}
