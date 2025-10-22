@@ -107,11 +107,45 @@ def classify_vowel(f1, f2):
     for vowel, data in VOWELS.items():
         dist = np.sqrt((np.log(f1) - np.log(data['f1']))**2 + (np.log(f2) - np.log(data['f2']))**2)
         if dist < min_dist: min_dist, best_match = dist, vowel
-    
+
     threshold = 0.4
     confidence = max(0, 100 * (1 - min_dist / (threshold * 2)))
     if min_dist > threshold: return best_match, round(confidence)
     return best_match, round(confidence)
+
+def get_pronunciation_advice(current_f1, current_f2, target_vowel):
+    """F1とF2の位置に基づいて発音アドバイスを生成"""
+    if current_f1 <= 0 or current_f2 <= 0:
+        return "マイクに向かって話してください"
+
+    target_data = VOWELS[target_vowel]
+    target_f1 = target_data['f1']
+    target_f2 = target_data['f2']
+
+    # F1とF2の差を計算（許容範囲: 10%）
+    f1_diff_percent = ((current_f1 - target_f1) / target_f1) * 100
+    f2_diff_percent = ((current_f2 - target_f2) / target_f2) * 100
+
+    advice = []
+
+    # F1のアドバイス（口の開き具合）
+    if abs(f1_diff_percent) > 10:
+        if f1_diff_percent > 0:
+            advice.append("🔽 口を少し閉じてください (F1が高すぎます)")
+        else:
+            advice.append("🔼 口をもっと開けてください (F1が低すぎます)")
+
+    # F2のアドバイス（舌の前後位置）
+    if abs(f2_diff_percent) > 10:
+        if f2_diff_percent > 0:
+            advice.append("👈 舌を後ろに引いてください (F2が高すぎます)")
+        else:
+            advice.append("👉 舌を前に出してください (F2が低すぎます)")
+
+    if not advice:
+        return "✅ 完璧です！この発音を維持してください！"
+
+    return " | ".join(advice)
 
 class AudioWorker(QObject):
     data_updated = pyqtSignal(dict)
@@ -314,6 +348,10 @@ class SpectrogramApp(QMainWindow):
                 self.detected_vowel_text.setText(f"{vowel} {is_match} ({conf}%)")
             else:
                  self.detected_vowel_text.setText(" - ")
+
+            # 発音アドバイスを更新
+            advice = get_pronunciation_advice(self.current_f1, self.current_f2, self.target_vowel)
+            self.advice_text.setText(advice)
         else:
             self.formant_text.setText("F1= - Hz, F2= - Hz")
             self.current_pos_plot.setData([], [])
@@ -321,6 +359,7 @@ class SpectrogramApp(QMainWindow):
             self.measured_f2_line.setPos(-1)
             self.measured_f1_label.setText("")
             self.measured_f2_label.setText("")
+            self.advice_text.setText("マイクに向かって話してください")
 
     def _create_main_layout(self):
         main_layout = QGridLayout(self.central_widget)
@@ -373,6 +412,14 @@ class SpectrogramApp(QMainWindow):
         self.peak_freq_text = self._add_status_row(layout, 3, "Peak Frequency:", "- Hz", is_formant=True)
         self.formant_text = self._add_status_row(layout, 4, "Measured Formants:", "F1=-, F2=-", is_formant=True)
         self.detected_vowel_text = self._add_status_row(layout, 5, "Detected Vowel:", "-", is_formant=True)
+
+        # アドバイスセクションを追加
+        advice_label = QLabel("<h2>💡 発音アドバイス</h2>")
+        layout.addWidget(advice_label, 6, 0, 1, 2)
+        self.advice_text = QLabel("マイクに向かって話してください")
+        self.advice_text.setWordWrap(True)
+        self.advice_text.setStyleSheet("color: #ffff44; font-size: 13px; font-weight: bold; padding: 10px; background-color: rgba(50, 50, 50, 0.5); border-radius: 5px;")
+        layout.addWidget(self.advice_text, 7, 0, 1, 2)
 
     def _add_status_row(self, layout, row, label_text, value_text, is_formant=False):
         label = QLabel(f"<strong>{label_text}</strong>"); value = QLabel(value_text)
