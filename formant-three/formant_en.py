@@ -244,7 +244,9 @@ class SpectrogramApp(QMainWindow):
         self.audio_worker.data_updated.connect(self._update_ui)
         self.audio_thread.started.connect(self.audio_worker.start)
 
-        self.ws_server = F1WebSocketServer()
+        # WebSocket
+
+        self.ws_server = F1WebSocketServer() 
         self.ws_server.start()
 
     def _create_plots(self):
@@ -298,14 +300,14 @@ class SpectrogramApp(QMainWindow):
 
         self.current_pos_plot = pg.ScatterPlotItem(size=20, brush=pg.mkBrush('r'), pen=pg.mkPen('w', width=2))
         p2.addItem(self.current_pos_plot)
-
+        
     def _set_target_vowel(self, vowel):
         self.target_vowel = vowel
         self.target_vowel_text.setText(f"{vowel}")
-        
+
         target_f1 = VOWELS[vowel]['f1']
         target_f2 = VOWELS[vowel]['f2']
-        
+
         self.target_f1_line.setPos(target_f1)
         self.target_f2_line.setPos(target_f2)
 
@@ -313,8 +315,16 @@ class SpectrogramApp(QMainWindow):
         self.target_f2_label.setText(f"Target F2: {int(target_f2)}Hz")
         self.target_f1_label.setPos(10, target_f1 + 5)
         self.target_f2_label.setPos(10, target_f2 + 5)
-        
+
         self._highlight_target_vowel()
+
+        # 🔽 追加：録音中でなくても target を送る
+        if hasattr(self, "ws_server") and self.ws_server:
+            self.ws_server.send_formant(
+                self.current_f1 if self.is_recording else 100,
+                self.target_vowel
+        )
+
 
     @pyqtSlot(dict)
     def _update_ui(self, data):
@@ -340,8 +350,17 @@ class SpectrogramApp(QMainWindow):
             self.current_f1 = alpha * f1 + (1 - alpha) * self.current_f1
             self.current_f2 = alpha * f2 + (1 - alpha) * self.current_f2
             
+            # if self.is_recording:
+            #     self.ws_server.send_f1(self.current_f1)
+
             if self.is_recording:
-                self.ws_server.send_f1(self.current_f1)
+                vowel, conf = classify_vowel(self.current_f1, self.current_f2)
+                self.ws_server.send_formant(
+                    self.current_f1,
+                    # vowel,                 # 現在の母音
+                    self.target_vowel      # 目標の母音
+                )
+                # print(f"Sending formant: {self.current_f1},{self.target_vowel}")
 
             self.formant_text.setText(f"F1={int(self.current_f1)}Hz, F2={int(self.current_f2)}Hz")
             self.current_pos_plot.setData(x=[self.current_f2], y=[self.current_f1])
@@ -453,7 +472,13 @@ class SpectrogramApp(QMainWindow):
             self.measured_f1_line.setPos(-1); self.measured_f2_line.setPos(-1)
             self.measured_f1_label.setText(""); self.measured_f2_label.setText("")
 
-            self.ws_server.send_f1(100)
+            # self.ws_server.send_f1(100)
+
+            self.ws_server.send_formant(
+                100,
+                # None,
+                self.target_vowel
+            )
 
         self.record_btn.style().unpolish(self.record_btn); self.record_btn.style().polish(self.record_btn)
 
@@ -516,16 +541,22 @@ class F1WebSocketServer:
         finally:
             self.clients.discard(websocket)
 
-    def send_f1(self, f1):
+    def send_formant(self, f1, target_vowel):
         if not self.loop or not self.loop.is_running():
             return
         if not self.clients:
             return
 
-        data = json.dumps({"F1": float(f1)})
+        data = json.dumps({
+            "f1": float(f1),
+            "target_vowel": target_vowel
+        })
+
         asyncio.run_coroutine_threadsafe(
             self._broadcast(data), self.loop
         )
+
+
 
     async def _broadcast(self, message):
         await asyncio.gather(
