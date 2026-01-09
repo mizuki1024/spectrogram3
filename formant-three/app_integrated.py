@@ -228,28 +228,61 @@ class F1WebSocketServer:
     def __init__(self, host="localhost", port=8765):
         self.host, self.port, self.clients = host, port, set()
         self.loop, self.thread = None, None
+        self.server_started = threading.Event()
+        self.server = None
+
     def start(self):
-        if self.thread and self.thread.is_alive(): return
-        self.loop = asyncio.new_event_loop()
+        if self.thread and self.thread.is_alive():
+            print("⚠️ WebSocketサーバーは既に起動しています")
+            return
+        print(f"🔄 WebSocketサーバーを起動中... (ポート: {self.port})")
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
+        # サーバーが起動するまで最大5秒待つ
+        if self.server_started.wait(timeout=5):
+            print(f"✅ WebSocketサーバーが正常に起動しました: ws://{self.host}:{self.port}")
+        else:
+            print(f"❌ WebSocketサーバーの起動がタイムアウトしました")
+
     def _run(self):
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_until_complete(websockets.serve(self._handler, self.host, self.port))
-        self.loop.run_forever()
+        try:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+
+            async def start_server():
+                self.server = await websockets.serve(self._handler, self.host, self.port)
+                print(f"🔌 WebSocketサーバーがポート {self.port} でリッスンを開始しました")
+                self.server_started.set()
+
+            self.loop.run_until_complete(start_server())
+            self.loop.run_forever()
+        except Exception as e:
+            print(f"❌ WebSocketサーバーの起動に失敗しました: {e}")
+            import traceback
+            traceback.print_exc()
+            self.server_started.set()  # エラーでもブロック解除
+
     async def _handler(self, websocket):
+        client_addr = websocket.remote_address
+        print(f"🔗 クライアントが接続しました: {client_addr}")
         self.clients.add(websocket)
         try:
-            async for _ in websocket:
-                pass
+            async for message in websocket:
+                pass  # クライアントからのメッセージを待つ
+        except Exception as e:
+            print(f"⚠️ WebSocket接続エラー: {e}")
         finally:
             self.clients.discard(websocket)
+            print(f"🔌 クライアントが切断しました: {client_addr}")
+
     def send_formant(self, f1, target_vowel):
         if self.loop and self.loop.is_running() and self.clients:
             data = json.dumps({"f1": float(f1), "target_vowel": target_vowel})
             asyncio.run_coroutine_threadsafe(self._broadcast(data), self.loop)
+
     async def _broadcast(self, message):
-        await asyncio.gather(*[client.send(message) for client in self.clients], return_exceptions=True)
+        if self.clients:
+            await asyncio.gather(*[client.send(message) for client in self.clients], return_exceptions=True)
 
 class MplCanvas(FigureCanvas):
     def __init__(self, parent=None, width=12, height=6, dpi=100):
@@ -278,8 +311,13 @@ class IntegratedApp(QMainWindow):
         freqs = np.fft.rfftfreq(self.chunk_size, 1/self.sample_rate)
         self.num_freq_bins = len(freqs[freqs <= self.max_freq])
         self.spectrogram_data = np.zeros((200, self.num_freq_bins))
+
+        print("=" * 60)
+        print("🚀 統合アプリケーションを初期化中...")
+        print("=" * 60)
         self.ws_server = F1WebSocketServer()
         self.ws_server.start()
+
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
         self.tab1 = self._create_formant_tab()

@@ -33,6 +33,19 @@ let targetData = { f1: 100, f2: 0 };
 
 const socket = new WebSocket("ws://localhost:8765");
 
+socket.onopen = () => {
+  console.log("✅ WebSocket接続成功！サーバーと連携できています。");
+};
+
+socket.onerror = (error) => {
+  console.error("❌ WebSocket接続エラー:", error);
+  console.error("Pythonアプリケーション（app_integrated.py）が起動しているか確認してください。");
+};
+
+socket.onclose = () => {
+  console.log("⚠️ WebSocket接続が閉じられました。");
+};
+
 socket.onmessage = (event) => {
   console.log("RAW:", event.data);
   const data = JSON.parse(event.data);
@@ -47,6 +60,7 @@ socket.onmessage = (event) => {
   if (data.target_vowel && VOWELS[data.target_vowel]) {
     targetData.f1 = VOWELS[data.target_vowel].f1;
     targetData.f2 = VOWELS[data.target_vowel].f2;
+    console.log("Target vowel updated:", data.target_vowel, targetData);
   }
 };
 
