@@ -13,8 +13,9 @@ three.js 側で口形状をリアルタイムに制御する。
 
 ## ディレクトリ構成
 formant-three/
-├─ formant_en.py
+├─ formant_en.py(不要)
 └─ vite-project/
+└─ app_integrated.py
 ---
 
 ## 実行環境
@@ -34,7 +35,7 @@ formant-three/
 フォルマント解析および通信制御を行う Python アプリケーションを起動する。
 
 ```bash
-python formant_en.py
+python formant-three/app_integrated.py
 
 別のターミナルで Web アプリケーションを起動する。
 
@@ -61,5 +62,6 @@ three.js 側では、受信した F1 値に応じて
 
 注意事項
 	•	Python 側アプリケーションを先に起動してください。
+
 
 
