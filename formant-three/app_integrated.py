@@ -275,9 +275,9 @@ class F1WebSocketServer:
             self.clients.discard(websocket)
             print(f"🔌 クライアントが切断しました: {client_addr}")
 
-    def send_formant(self, f1, target_vowel):
+    def send_formant(self, f1, f2, target_vowel):
         if self.loop and self.loop.is_running() and self.clients:
-            data = json.dumps({"f1": float(f1), "target_vowel": target_vowel})
+            data = json.dumps({"f1": float(f1),  "f2": float(f2), "target_vowel": target_vowel})
             asyncio.run_coroutine_threadsafe(self._broadcast(data), self.loop)
 
     async def _broadcast(self, message):
@@ -471,9 +471,15 @@ class IntegratedApp(QMainWindow):
         self.target_f1_label.setPos(10, target_f1 + 5)
         self.target_f2_label.setPos(10, target_f2 + 5)
         self._highlight_target_vowel()
+        # if hasattr(self, "ws_server") and self.ws_server:
+        #     self.ws_server.send_formant(self.current_f1 if self.is_recording else 100, self.target_vowel)
+        # 🔽 追加：録音中でなくても target を送る
         if hasattr(self, "ws_server") and self.ws_server:
-            self.ws_server.send_formant(self.current_f1 if self.is_recording else 100, self.target_vowel)
-
+            self.ws_server.send_formant(
+                self.current_f1 if self.is_recording else 100,
+                self.current_f2 if self.is_recording else 2000,
+                self.target_vowel
+        )
     @pyqtSlot(dict)
     def _update_ui(self, data):
         spectrum = data['spectrum']
@@ -492,7 +498,7 @@ class IntegratedApp(QMainWindow):
             self.current_f2 = 0.6 * f2 + 0.4 * self.current_f2
             if self.is_recording:
                 vowel, conf = classify_vowel(self.current_f1, self.current_f2)
-                self.ws_server.send_formant(self.current_f1, self.target_vowel)
+                self.ws_server.send_formant(self.current_f1, self.current_f2, self.target_vowel)
             self.formant_text.setText(f"F1={int(self.current_f1)}Hz, F2={int(self.current_f2)}Hz")
             self.current_pos_plot.setData(x=[self.current_f2], y=[self.current_f1])
             self.measured_f1_line.setPos(self.current_f1)
@@ -527,7 +533,7 @@ class IntegratedApp(QMainWindow):
             self.record_btn.setText("🎙️ Start Recording")
             self.record_btn.setProperty("class", "")
             self.status_text.setText("Stopped.")
-            self.ws_server.send_formant(100, self.target_vowel)
+            self.ws_server.send_formant(100, 2000, self.target_vowel)
         self.record_btn.style().unpolish(self.record_btn)
         self.record_btn.style().polish(self.record_btn)
 
