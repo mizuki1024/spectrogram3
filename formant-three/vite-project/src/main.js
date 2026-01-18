@@ -2,6 +2,48 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+import {
+  FaceLandmarker,
+  FilesetResolver
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8";
+
+/* =======================
+   Scene / Camera / Renderer
+======================= */
+const scene = new THREE.Scene();
+
+//カメラの設定
+const camera = new THREE.PerspectiveCamera(
+  60,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+camera.position.set(0, 2, 21);
+
+//レンダーの設定
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+//canvasをHTMLのbodyに追加
+document.body.appendChild(renderer.domElement);
+
+//マウスで回転や移動などの操作
+const controls = new OrbitControls(camera, renderer.domElement);
+scene.add(new THREE.AmbientLight(0xffffff, 1));
+
+/* =======================
+   表示用 Group（4要素）
+======================= */
+const currentModelGroup = new THREE.Group();
+const targetModelGroup  = new THREE.Group();
+const halfModelGroup    = new THREE.Group();
+const cameraGroup       = new THREE.Group();
+
+scene.add(currentModelGroup);
+scene.add(targetModelGroup);
+scene.add(halfModelGroup);
+scene.add(cameraGroup);
+
 /* =======================
    VOWELS（Pythonと一致）
 ======================= */
@@ -50,20 +92,10 @@ const F2_ROUND_START = 1300;
 
 let targetData = { f1: 100, f2: 0 };
 
+
+
 const socket = new WebSocket("ws://localhost:8765");
 
-socket.onopen = () => {
-  console.log("✅ WebSocket接続成功！サーバーと連携できています。");
-};
-
-socket.onerror = (error) => {
-  console.error("❌ WebSocket接続エラー:", error);
-  console.error("Pythonアプリケーション（app_integrated.py）が起動しているか確認してください。");
-};
-
-socket.onclose = () => {
-  console.log("⚠️ WebSocket接続が閉じられました。");
-};
 
 socket.onmessage = (event) => {
   console.log("RAW:", event.data);
@@ -85,26 +117,9 @@ socket.onmessage = (event) => {
   if (data.target_vowel && VOWELS[data.target_vowel]) {
     targetData.f1 = VOWELS[data.target_vowel].f1;
     targetData.f2 = VOWELS[data.target_vowel].f2;
-    console.log("Target vowel updated:", data.target_vowel, targetData);
   }
 };
 
-/* =======================
-   Scene
-======================= */
-const scene = new THREE.Scene();
-
-const camera = new THREE.PerspectiveCamera(
-  60, window.innerWidth / window.innerHeight, 0.1, 1000
-);
-camera.position.set(0, 2, 21);
-
-const renderer = new THREE.WebGLRenderer({ antialias:true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-scene.add(new THREE.AmbientLight(0xffffff, 1));
 
 /* =======================
    Mouth models
@@ -119,15 +134,28 @@ let mouthOver2 = null;
 let mouth_L2 = null;
 let mouth_R2 = null;
 let head2 = null;
+let mouthUnder_half = null;
+let mouthOver_half = null;
+let mouth_L_half = null;
+let mouth_R_half = null;
+let head_half = null;
+let tongue00 = null;
+let tongue01 = null;
+let tongue02 = null;
+let tongue03 = null;
+let tongue04 = null;
 
+/* =======================
+   GLTF Models
+======================= */
 const loader = new GLTFLoader();
+const position = 6;
 
-let position = 6;
-// ===== 現在の口（右）=====
+// 現在モデル
 loader.load("/model.glb", (gltf) => {
   const model = gltf.scene;
   model.position.x = position;
-  scene.add(model);
+  currentModelGroup.add(model);
 
   mouthUnder = model.getObjectByName("mouth_under");
   mouthOver = model.getObjectByName("mouth_over");
@@ -136,13 +164,14 @@ loader.load("/model.glb", (gltf) => {
   head = model.getObjectByName("head");
 
   console.log("current mouth:", mouthUnder, mouthOver, mouth_L, mouth_R, head);
+
 });
 
-// ===== 目標の口（左）=====
+// 目標モデル
 loader.load("/model2.glb", (gltf) => {
   const model = gltf.scene;
   model.position.x = -position;
-  scene.add(model);
+  targetModelGroup.add(model);
 
   mouthUnder2 = model.getObjectByName("mouth_under_2");
   mouthOver2 = model.getObjectByName("mouth_over_2");
@@ -152,6 +181,276 @@ loader.load("/model2.glb", (gltf) => {
 
   console.log("target mouth:", mouthUnder2, mouthOver2, mouth_L2, mouth_R2, head2);
 });
+
+//モデル(半身)
+loader.load("/model_half.glb", (gltf) => {
+  const model = gltf.scene;
+  model.position.x = position-5;
+  halfModelGroup.add(model);
+
+  mouthUnder_half = model.getObjectByName("mouth_under_half");
+  mouthOver_half = model.getObjectByName("mouth_over_half");
+  mouth_L_half = model.getObjectByName("mouth_L_half");
+  mouth_R_half = model.getObjectByName("mouth_R_half");
+  head_half = model.getObjectByName("head_half");
+  tongue00 = model.getObjectByName("tounge00_half");
+  tongue01 = model.getObjectByName("tounge01_half");
+  tongue02 = model.getObjectByName("tounge02_half");
+  tongue03 = model.getObjectByName("tounge03_half");
+  tongue04 = model.getObjectByName("tounge04_half");
+
+  console.log("current mouth:", mouthUnder_half, mouthOver_half, mouth_L_half, mouth_R_half, head_half);
+
+});
+
+/* =======================
+   Web Camera Plane
+======================= */
+const videoEl = document.createElement("video");
+videoEl.autoplay = true;
+videoEl.muted = true;
+videoEl.playsInline = true;
+
+navigator.mediaDevices.getUserMedia({ video: true })
+  .then(stream => {
+    videoEl.srcObject = stream;
+    videoEl.onloadedmetadata = () => videoEl.play();
+  })
+  .catch(err => console.error("Camera error:", err));
+
+const videoTexture = new THREE.VideoTexture(videoEl);
+videoTexture.minFilter = THREE.LinearFilter;
+videoTexture.magFilter = THREE.LinearFilter;
+videoTexture.colorSpace = THREE.SRGBColorSpace;
+
+//映像を貼るメッシュの生成
+const cameraPlane = new THREE.Mesh(
+  new THREE.PlaneGeometry(12, 9),
+  new THREE.MeshBasicMaterial({ map: videoTexture })
+);
+cameraPlane.position.set(0, 2, 6);
+//表示するためのシーンに追加
+cameraGroup.add(cameraPlane);
+
+/* 初期状態 */
+
+currentModelGroup.visible = true;
+targetModelGroup.visible = false;
+halfModelGroup.visible = false;
+cameraGroup.visible = false;
+
+/* =======================
+   MediaPipe FaceLandmarker
+======================= */
+let faceLandmarker;
+let lastVideoTime = -1;
+
+// 使用している顔のランドマーク
+const TARGET_POINTS = [13, 14, 61, 291, 152, 10];
+
+async function initFaceLandmarker() {
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
+  );
+
+  faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath:
+        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+      delegate: "CPU"
+    },
+    runningMode: "VIDEO",
+    numFaces: 1
+  });
+}
+
+initFaceLandmarker()
+  .then(() => {
+    console.log("FaceLandmarker ready");
+  })
+  .catch(err => {
+    console.error("FaceLandmarker init error:", err);
+  });
+
+/* =======================
+   Landmark Visualization
+======================= */
+
+//ランドマークを表示するためのグループ
+const landmarkGroup = new THREE.Group();
+cameraPlane.add(landmarkGroup);
+
+//ランドマークを表示するためのメッシュ
+const landmarkMeshes = {};
+const pointGeometry = new THREE.SphereGeometry(0.08, 16, 16);
+const pointMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+
+//各ポイントにランドマークを表示
+TARGET_POINTS.forEach(i => {
+  const mesh = new THREE.Mesh(pointGeometry, pointMaterial);
+  landmarkGroup.add(mesh);
+  landmarkMeshes[i] = mesh;
+});
+
+/* =======================
+   Landmark Update
+======================= */
+
+function dist(a, b) {
+  if (!a || !b) return 0; // aまたはbがundefinedなら0を返す
+  return a.position.distanceTo(b.position);
+}
+
+const infoDiv = document.getElementById("info");
+
+// =======================
+// 安全に距離を計算する関数
+// =======================
+function safeDist(a, b) {
+  if (!a || !b) return 0;  // a または b が undefined なら 0
+  return a.position.distanceTo(b.position);
+}
+
+// =======================
+// ★ 平滑化用（追加）
+// =======================
+let smoothOpen  = 0;
+let smoothWidth = 0;
+let smoothwidthAngleDeg_1 = 0;
+let smoothwidthAngleDeg_2 = 0;
+const alpha = 0.2;   // 0.1〜0.3 推奨
+
+function updateLandmarks(faceLandmarks) {
+  if (!faceLandmarks) return; // undefinedなら何もしない
+
+  //カメラのサイズ
+  const w = 12;
+  const h = 9;
+
+  //ランドマークの座標を更新
+  TARGET_POINTS.forEach(i => {
+    const lm = faceLandmarks[i];
+    if (!lm) return;
+
+    const x = (lm.x - 0.5) * w;
+    const y = -(lm.y - 0.5) * h;
+    const z = 0.01;
+
+    landmarkMeshes[i].position.set(x, y, z);
+  });
+
+
+  //顔の高さの計算
+  const faceHeight = faceLandmarks[152].y - faceLandmarks[10].y;
+  if (faceHeight === 0) return; // まだ正しい顔サイズが取れていない
+
+  //正規化
+  const openNorm  = (faceLandmarks[14].y  - faceLandmarks[13].y) / faceHeight;
+  const widthNorm = (faceLandmarks[61].x - faceLandmarks[291].x) / faceHeight;
+
+
+  const p61  = faceLandmarks[61];
+  const p291 = faceLandmarks[291];
+  const p13  = faceLandmarks[13];
+  const p14  = faceLandmarks[14];
+  
+  // ===== 基準ベクトル（61 → 291）=====
+  const baseX = p291.x - p61.x;
+  const baseY = p291.y - p61.y;
+  const baseAngle = Math.atan2(baseY, baseX); // これが 0° 扱い
+  
+  // ===== 61 → 13 =====
+  const v13x = p13.x - p61.x;
+  const v13y = p13.y - p61.y;
+  const angle13 = Math.atan2(v13y, v13x) - baseAngle;
+  
+  // ===== 61 → 14 =====
+  const v14x = p14.x - p61.x;
+  const v14y = p14.y - p61.y;
+  const angle14 = Math.atan2(v14y, v14x) - baseAngle;
+  
+  function normalizeAngle(rad) {
+    if (rad > Math.PI)  rad -= 2 * Math.PI;
+    if (rad < -Math.PI) rad += 2 * Math.PI;
+    return rad;
+  }
+  
+  const normAngle13 = normalizeAngle(angle13);
+  const normAngle14 = normalizeAngle(angle14);
+
+  const deg13 = -normAngle13 * 180 / Math.PI;
+  const deg14 = normAngle14 * 180 / Math.PI;
+
+  
+
+  // ===== 距離計算 =====
+  //前回値と今回値を線形補間
+  smoothOpen  = alpha * openNorm  + (1 - alpha) * smoothOpen;
+  smoothWidth = alpha * widthNorm + (1 - alpha) * smoothWidth;
+  smoothwidthAngleDeg_1 = alpha * deg13 + (1 - alpha) * smoothwidthAngleDeg_1;
+  smoothwidthAngleDeg_2 = alpha * deg14 + (1 - alpha) * smoothwidthAngleDeg_2;
+
+
+  // infoDiv.innerText = `open: ${smoothOpen.toFixed(3)} | width: ${smoothWidth.toFixed(3)}`;
+  if (infoDiv) {
+    infoDiv.innerText =
+      `open: ${smoothOpen.toFixed(3)} | widthDeg_1: ${smoothwidthAngleDeg_1.toFixed(3)} | widthDeg_2: ${smoothwidthAngleDeg_2.toFixed(3)}`;
+  }
+  
+}
+
+
+//毎フレーム顔を検出
+async function detectFace() {
+  if (!faceLandmarker) return;
+
+  if (videoEl.currentTime !== lastVideoTime) {
+    lastVideoTime = videoEl.currentTime;
+
+    const result = await faceLandmarker.detectForVideo(videoEl, performance.now());
+
+    if (result.faceLandmarks.length > 0) {
+      updateLandmarks(result.faceLandmarks[0]);
+    }
+  }
+}
+
+/* =======================
+   チェックボックス制御
+======================= */
+const chkCurrent = document.getElementById("chkCurrent");
+const chkTarget  = document.getElementById("chkTarget");
+const chkHalf    = document.getElementById("chkHalf");
+const chkCamera  = document.getElementById("chkCamera");
+
+function updateVisibility(e) {
+  const states = [
+    chkCurrent.checked,
+    chkTarget.checked,
+    chkHalf.checked,
+    chkCamera.checked
+  ];
+
+  // 最低1つ必須
+  if (states.filter(v => v).length === 0) {
+    e.target.checked = true;
+    return;
+  }
+
+  currentModelGroup.visible = chkCurrent.checked;
+  targetModelGroup.visible  = chkTarget.checked;
+  halfModelGroup.visible    = chkHalf.checked;
+  cameraGroup.visible       = chkCamera.checked;
+
+  landmarkGroup.visible = chkCamera.checked;
+
+  controls.enabled = chkCurrent.checked || chkTarget.checked || chkHalf.checked;
+}
+
+chkCurrent.onchange = updateVisibility;
+chkTarget.onchange  = updateVisibility;
+chkHalf.onchange    = updateVisibility;
+chkCamera.onchange  = updateVisibility;
 
 /* =======================
    Animation
@@ -228,6 +527,10 @@ function animate() {
     let i2 = -HEAD_MAX - h2 * MAXF1;
     head2.rotation.x = (targetData.f1 * h2 + i2) * Math.PI / 180;
   
+  }
+
+  if (chkCamera.checked) {
+    detectFace();
   }
 
   controls.update();
