@@ -2,9 +2,96 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>three.js + Vite</title>
+    <title>Three.js + Camera Control</title>
+
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+      }
+
+      /* =========================
+         表示切替チェックシート
+      ========================= */
+      #displayControls {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        padding: 10px 14px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-size: 14px;
+        border-radius: 6px;
+        font-family: sans-serif;
+      }
+
+      #displayControls label {
+        display: block;
+        margin-bottom: 4px;
+        cursor: pointer;
+      }
+
+      #displayControls input {
+        margin-right: 6px;
+      }
+
+      /* =========================
+         距離・角度表示
+      ========================= */
+      #info {
+        position: fixed;
+        top: 12px;
+        left: 230px;
+        z-index: 10;
+        padding: 6px 10px;
+        font-size: 15px;
+        font-family: monospace;
+        color: #00ff00;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 5px;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+    </style>
   </head>
+
   <body>
+
+    <!-- =========================
+         チェックシート
+    ========================= -->
+    <div id="displayControls">
+      <label>
+        <input type="checkbox" id="chkCurrent" checked>
+        Current model
+      </label>
+      <label>
+        <input type="checkbox" id="chkTarget" checked>
+        Target model
+      </label>
+      <label>
+        <input type="checkbox" id="chkHalf" checked>
+        Half model
+      </label>
+      <label>
+        <input type="checkbox" id="chkCamera">
+        Camera
+      </label>
+    </div>
+
+    <!-- =========================
+         情報表示
+    ========================= -->
+    <div id="info">
+      open: 0.000 | widthDeg_1: 0.000 | widthDeg_2: 0.000
+    </div>
+
+    <!-- =========================
+         Three.js main
+    ========================= -->
     <script type="module" src="/src/main.js"></script>
+
   </body>
 </html>
