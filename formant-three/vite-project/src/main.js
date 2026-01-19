@@ -19,7 +19,13 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-camera.position.set(0, 2, 21);
+// camera.position.set(0, 2, 21);
+
+const CAMERA_PRESET = {
+  1: { x: 0, y: 2, z: 21 }, // 1モデル
+  2: { x: 0, y: 2, z: 26 }, // 2モデル
+  3: { x: 0, y: 2, z: 32 }, // 3モデル
+};
 
 //レンダーの設定
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -149,12 +155,12 @@ let tongue04 = null;
    GLTF Models
 ======================= */
 const loader = new GLTFLoader();
-const position = 6;
+// const position = 6;
 
 // 現在モデル
 loader.load("/model.glb", (gltf) => {
   const model = gltf.scene;
-  model.position.x = position;
+  // model.position.x = position;
   currentModelGroup.add(model);
 
   mouthUnder = model.getObjectByName("mouth_under");
@@ -170,7 +176,7 @@ loader.load("/model.glb", (gltf) => {
 // 目標モデル
 loader.load("/model2.glb", (gltf) => {
   const model = gltf.scene;
-  model.position.x = -position;
+  // model.position.x = -position;
   targetModelGroup.add(model);
 
   mouthUnder2 = model.getObjectByName("mouth_under_2");
@@ -185,7 +191,8 @@ loader.load("/model2.glb", (gltf) => {
 //モデル(半身)
 loader.load("/model_half.glb", (gltf) => {
   const model = gltf.scene;
-  model.position.x = position-5;
+  // model.position.x = position-5;
+  model.rotation.y = -Math.PI / 2;
   halfModelGroup.add(model);
 
   mouthUnder_half = model.getObjectByName("mouth_under_half");
@@ -223,16 +230,18 @@ videoTexture.minFilter = THREE.LinearFilter;
 videoTexture.magFilter = THREE.LinearFilter;
 videoTexture.colorSpace = THREE.SRGBColorSpace;
 
+const CAMERA_PLANE_W = 12;
+const CAMERA_PLANE_H = 15;
+
 //映像を貼るメッシュの生成
 const cameraPlane = new THREE.Mesh(
-  new THREE.PlaneGeometry(12, 9),
+  new THREE.PlaneGeometry(CAMERA_PLANE_W, CAMERA_PLANE_H, 1, 1),
   new THREE.MeshBasicMaterial({ map: videoTexture })
 );
-cameraPlane.position.set(0, 2, 6);
+// cameraPlane.position.set(0, 2, 6);
 //表示するためのシーンに追加
 cameraGroup.add(cameraPlane);
 
-/* 初期状態 */
 
 currentModelGroup.visible = true;
 targetModelGroup.visible = false;
@@ -324,8 +333,8 @@ function updateLandmarks(faceLandmarks) {
   if (!faceLandmarks) return; // undefinedなら何もしない
 
   //カメラのサイズ
-  const w = 12;
-  const h = 9;
+  const w = CAMERA_PLANE_W;
+  const h = CAMERA_PLANE_H;
 
   //ランドマークの座標を更新
   TARGET_POINTS.forEach(i => {
@@ -402,6 +411,12 @@ function updateLandmarks(faceLandmarks) {
 
 //毎フレーム顔を検出
 async function detectFace() {
+  if (
+    videoEl.videoWidth === 0 ||
+    videoEl.videoHeight === 0
+  ) {
+    return; // まだカメラ準備中
+  }
   if (!faceLandmarker) return;
 
   if (videoEl.currentTime !== lastVideoTime) {
@@ -415,6 +430,10 @@ async function detectFace() {
   }
 }
 
+// /* =======================
+//    チェックボックス制御
+// ======================= */
+
 /* =======================
    チェックボックス制御
 ======================= */
@@ -423,34 +442,110 @@ const chkTarget  = document.getElementById("chkTarget");
 const chkHalf    = document.getElementById("chkHalf");
 const chkCamera  = document.getElementById("chkCamera");
 
-function updateVisibility(e) {
-  const states = [
-    chkCurrent.checked,
-    chkTarget.checked,
-    chkHalf.checked,
-    chkCamera.checked
-  ];
+const items = [
+  { chk: chkCurrent, group: currentModelGroup },
+  { chk: chkTarget,  group: targetModelGroup },
+  { chk: chkHalf,    group: halfModelGroup },
+  { chk: chkCamera,  group: cameraGroup }
+];
 
-  // 最低1つ必須
-  if (states.filter(v => v).length === 0) {
-    e.target.checked = true;
+/* ===== スロット定義 ===== */
+const SLOT_MAP = {
+  1: [  0 ],
+  2: [ -7,  7 ],
+  3: [ -13,  0,  13 ],
+};
+
+const MODEL_PRIORITY = new Map([
+  [targetModelGroup,  0],
+  [halfModelGroup,    1],
+  [currentModelGroup, 2],
+  [cameraGroup,       3],
+]);
+
+const layoutItems = [
+  { chk: chkTarget,  group: targetModelGroup,  type: "model" },
+  { chk: chkHalf,    group: halfModelGroup,    type: "model" },
+  { chk: chkCurrent, group: currentModelGroup, type: "model" },
+  { chk: chkCamera,  group: cameraGroup,       type: "camera" },
+];
+
+function updateLayout() {
+
+  // /* ===== 初期化 ===== */
+  layoutItems.forEach(item => {
+    item.group.visible = false;
+  });
+
+  /* ===== camera 表示 ===== */
+  landmarkGroup.visible = chkCamera.checked;
+
+  /* ===== モデル抽出 ===== */
+
+  const activeItems = layoutItems
+  .filter(item => item.chk.checked)
+  .sort((a, b) =>
+    (MODEL_PRIORITY.get(a.group) ?? 99) -
+    (MODEL_PRIORITY.get(b.group) ?? 99)
+  );
+
+  const visibleItems = activeItems.slice(0, 3);
+  const count = visibleItems.length;
+
+  if (count === 0) {
+    controls.enabled = false;
     return;
   }
 
-  currentModelGroup.visible = chkCurrent.checked;
-  targetModelGroup.visible  = chkTarget.checked;
-  halfModelGroup.visible    = chkHalf.checked;
-  cameraGroup.visible       = chkCamera.checked;
+  /* ===== スロット ===== */
+  const slots = SLOT_MAP[count];
 
-  landmarkGroup.visible = chkCamera.checked;
+  visibleItems.forEach((item, index) => {
+    item.group.visible = true;
+    item.group.position.set(slots[index], 0, 0);
+  });
 
-  controls.enabled = chkCurrent.checked || chkTarget.checked || chkHalf.checked;
+  /* ===== カメラ位置 ===== */
+  const cam = CAMERA_PRESET[count];
+  camera.position.set(cam.x, cam.y, cam.z);
+  camera.lookAt(0, 0, 0);
+
+  /* ===== OrbitControls ===== */
+  controls.enabled = true;
 }
 
-chkCurrent.onchange = updateVisibility;
-chkTarget.onchange  = updateVisibility;
-chkHalf.onchange    = updateVisibility;
-chkCamera.onchange  = updateVisibility;
+// イベント登録
+// items.forEach(item => {
+//   item.chk.addEventListener("change", updateLayout);
+// });
+function getCheckedCount() {
+  return items.filter(item => item.chk.checked).length;
+}
+
+items.forEach(item => {
+  item.chk.addEventListener("change", (e) => {
+
+    const checkedCount = getCheckedCount();
+
+    // ❌ 0個は禁止
+    if (checkedCount === 0) {
+      e.target.checked = true;
+      return;
+    }
+
+    // ❌ 4個以上は禁止
+    if (checkedCount > 3) {
+      e.target.checked = false;
+      return;
+    }
+
+    // ✅ 条件OKならレイアウト更新
+    updateLayout();
+  });
+});
+
+// ★ 初期状態を反映（重要）
+updateLayout({ target: chkCurrent });
 
 /* =======================
    Animation
